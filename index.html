@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>香蕉貓軍團 Ultimate</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --accent:     #4fc3f7;
+  --gold:       #FFD700;
+  --ui-bg:      rgba(10,15,40,0.75);
+  --ui-border:  rgba(100,180,255,0.18);
+  --font:       'Segoe UI', Arial, sans-serif;
+}
+
+body {
+  overflow: hidden;
+  width: 100vw; height: 100vh;
+  display: flex; justify-content: center; align-items: center;
+  /* 修改左右空白處的背景顏色：改成深黛藍色，不過於暗沉 */
+  background-color: #1e2235; 
+  background-image: radial-gradient(circle at center, #2a2e45 0%, #151828 100%);
+  font-family: var(--font);
+}
+
+/* ── Layout ── */
+#app-wrapper {
+  display: flex; align-items: center; justify-content: center;
+  width: 100vw; height: 100vh; gap: 40px; position: relative; z-index: 1;
+}
+
+.side-container {
+  flex: 1; display: flex; flex-direction: column;
+  justify-content: center; align-items: flex-end; max-width: 400px; height: 100%;
+}
+.side-container.right { align-items: flex-start; }
+
+/* ── Leaderboard Sidebar ── */
+#leaderboard {
+  width: 270px;
+  /* 讓排行榜變長 */
+  height: 75vh;
+  min-height: 550px; 
+  overflow-y: auto;
+  background: var(--ui-bg); border: 1.5px solid var(--ui-border);
+  border-radius: 20px; padding: 20px 16px;
+  backdrop-filter: blur(14px); box-shadow: 0 0 24px rgba(0,195,255,0.08); color: #fff;
+}
+#leaderboard::-webkit-scrollbar { width: 0px; }
+
+#leaderboard h2 {
+  font-size: 18px; font-weight: 800; text-align: center;
+  color: var(--gold); margin-bottom: 18px; letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(255,215,0,0.5);
+}
+
+.lb-entry {
+  display: flex; align-items: center; gap: 8px; padding: 10px 8px;
+  border-radius: 9px; margin-bottom: 8px; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07); font-size: 14px; transition: background 0.2s;
+}
+.lb-rank { width: 24px; text-align: center; font-weight: 900; font-size: 15px; }
+.lb-rank.r1 { color: #FFD700; text-shadow: 0 0 5px #FFD700; } 
+.lb-rank.r2 { color: #C0C0C0; } .lb-rank.r3 { color: #CD7F32; }
+.lb-score { font-weight: 700; color: var(--accent); margin-left: auto; font-size: 14px; }
+.lb-name  { color: #ccc; font-size: 13px; max-width: 85px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-wave  { font-size: 12px; color: #888; margin-left: auto; }
+
+#lb-empty { text-align: center; color: #555; font-size: 14px; padding: 24px 0; }
+.lb-divider { height: 1px; background: var(--ui-border); margin: 14px 0; }
+
+/* ── Canvas ── */
+#gameCanvas {
+  display: block; width: 420px; height: 800px; max-width: 100vw; max-height: 100vh; 
+  border-radius: 20px; border: 2px solid var(--ui-border); 
+  box-shadow: 0 0 60px rgba(0,0,0,0.5), 0 0 120px rgba(79,195,247,0.1);
+  touch-action: none; flex-shrink: 0; background: #000;
+}
+
+/* ── HUD ── */
+#hud {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 7px; z-index: 100; pointer-events: none;
+}
+.hud-card {
+  background: var(--ui-bg); color: #fff; padding: 7px 13px;
+  border-radius: 12px; font-size: 15px; font-weight: 700;
+  border: 1.5px solid var(--ui-border); backdrop-filter: blur(12px);
+  white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,0.6); transition: all 0.3s;
+}
+.fever-glow { box-shadow: 0 0 15px var(--gold); border-color: var(--gold); color: var(--gold); }
+.cooldown-state { color: #888; border-color: #555; }
+
+/* ── Pause Button ── */
+#pauseBtn {
+  position: fixed; top: 14px; right: calc(50% - 222px); z-index: 200;
+  background: var(--ui-bg); border: 1.5px solid var(--ui-border);
+  color: #fff; font-size: 20px; width: 44px; height: 44px;
+  border-radius: 12px; cursor: pointer; backdrop-filter: blur(10px); display: none;
+}
+
+/* ── Overlays ── */
+.overlay {
+  position: fixed; inset: 0; display: none; justify-content: center; align-items: center;
+  background: rgba(0,0,0,0.85); z-index: 999; backdrop-filter: blur(8px);
+}
+.overlay.active { display: flex; }
+
+.panel {
+  background: linear-gradient(160deg, #1a1f38 0%, #0f1020 100%); padding: 36px 40px;
+  border-radius: 24px; color: #fff; text-align: center; width: 380px;
+  border: 1.5px solid rgba(79,195,247,0.2); box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+}
+.panel h1 { font-size: 32px; margin-bottom: 6px; }
+.panel .subtitle { font-size: 14px; color: #667; margin-bottom: 24px; }
+.panel .info-box {
+  font-size:13.5px; color:#aab; margin-bottom:20px; text-align:left; 
+  background:rgba(0,0,0,0.4); padding:14px; border-radius:12px; line-height: 1.8;
+}
+
+.btn {
+  display: block; width: 100%; padding: 13px; margin-bottom: 11px;
+  border: none; border-radius: 12px; cursor: pointer; font-size: 17px; font-weight: 700;
+  transition: transform 0.14s, filter 0.14s; letter-spacing: 0.3px;
+}
+.btn:hover { transform: scale(1.04); filter: brightness(1.12); }
+.btn:active { transform: scale(0.97); }
+.btn-green  { background: linear-gradient(135deg, #1a8f4a, #22c065); color: #fff; }
+.btn-blue   { background: linear-gradient(135deg, #1a55cc, #2877ff); color: #fff; }
+.btn-red    { background: linear-gradient(135deg, #cc2222, #ee3333); color: #fff; }
+.btn-gray   { background: #2a2a3a; color: #aaa; }
+
+.setting-row { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; font-size: 15px; color: #ccd; font-weight: bold; }
+input[type=range] { width: 140px; accent-color: var(--accent); cursor: pointer; }
+
+.big-score { font-size: 52px; font-weight: 900; color: var(--gold); margin: 8px 0 4px; text-shadow: 0 0 20px rgba(255,215,0,0.4); }
+.stat-row { display: flex; justify-content: space-between; font-size: 14px; color: #889; margin-bottom: 5px; }
+
+#waveBanner {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 48px; font-weight: 900; color: var(--gold);
+  text-shadow: 0 0 30px rgba(255,215,0,0.8), 0 0 60px rgba(255,215,0,0.3);
+  pointer-events: none; z-index: 300; opacity: 0; transition: opacity 0.4s;
+}
+
+#nameInputBox { margin: 12px 0; display: flex; gap: 8px; }
+#nameInputBox input { flex: 1; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--ui-border); background: rgba(255,255,255,0.07); color: #fff; font-size: 15px; outline: none; }
+#nameInputBox button { padding: 10px 14px; border-radius: 10px; border: none; background: var(--accent); color: #000; font-weight: 700; cursor: pointer; }
+
+@media (max-width: 900px) { #app-wrapper { gap: 10px; } .side-container { display: none; } }
+@media (max-width: 680px) {
+  #gameCanvas { width: 100vw; height: 100vh; border-radius: 0; border: none; }
+  #hud { gap: 4px; flex-wrap: wrap; justify-content: center; top: 8px; }
+  .hud-card { font-size: 12px; padding: 5px 9px; }
+  #pauseBtn { right: 8px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-card" id="ui-combo-card" style="display:none">🔥 Combo <span id="ui-combo">0</span></div>
+  <div class="hud-card">🍌 <span id="ui-soldiers">0</span></div>
+  <div class="hud-card">❤️ <span id="ui-hp">100</span></div>
+  <div class="hud-card" id="ui-score-card">⭐ <span id="ui-score">0</span></div>
+  <div class="hud-card">🌊 Wave <span id="ui-wave">1</span></div>
+</div>
+
+<button id="pauseBtn" title="暫停">⏸</button>
+<div id="waveBanner"></div>
+
+<!-- Main Layout -->
+<div id="app-wrapper">
+  <div class="side-container">
+    <div id="leaderboard">
+      <h2>🏆 英雄排行榜</h2>
+      <div id="lb-list"><div id="lb-empty">尚無紀錄<br>快來創造第一個！</div></div>
+      <div class="lb-divider"></div>
+      <div style="font-size:12px;color:#556;text-align:center">結束後可上傳成績</div>
+    </div>
+  </div>
+  <canvas id="gameCanvas" width="420" height="800"></canvas>
+  <div class="side-container right"></div>
+</div>
+
+<!-- Main Menu -->
+<div class="overlay active" id="menuOverlay">
+  <div class="panel">
+    <h1>🍌 香蕉貓軍團</h1>
+    <p class="subtitle">Ultimate Edition v5 (Optimized)</p>
+    <button class="btn btn-green" id="startBtn">🎮 開始遊戲</button>
+    <div class="setting-row"><span>🔊 音效音量</span><input type="range" class="sfx-slider" min="0" max="100" value="50"></div>
+    <div class="setting-row"><span>🎵 BGM 音量</span><input type="range" class="bgm-slider" min="0" max="100" value="30"></div>
+    <br>
+    <div class="info-box">
+      🐱 左右滑動操控，穿越數學門改變火力<br>
+      🔥 連續擊殺疊加 Combo，達 20 觸發狂熱<br>
+      ❌ 撞到紅門或受傷 Combo 會瞬間歸零
+    </div>
+  </div>
+</div>
+
+<!-- Pause Menu -->
+<div class="overlay" id="pauseOverlay">
+  <div class="panel">
+    <h1>⏸ 遊戲暫停</h1><br>
+    <div class="setting-row"><span>🔊 音效音量</span><input type="range" class="sfx-slider" min="0" max="100" value="50"></div>
+    <div class="setting-row"><span>🎵 BGM 音量</span><input type="range" class="bgm-slider" min="0" max="100" value="30"></div>
+    <br>
+    <div class="info-box" style="margin-bottom: 25px;">
+      💡 <b>提示：</b> 狂熱狀態結束後會有冷卻時間，若在冷卻期間保持 Combo 不中斷，冷卻一結束將再次爆發狂熱！
+    </div>
+    <button class="btn btn-green" id="resumeBtn">▶ 繼續遊戲</button>
+    <button class="btn btn-red"   id="quitBtn">🏠 回主選單</button>
+  </div>
+</div>
+
+<!-- Game Over -->
+<div class="overlay" id="gameOverOverlay">
+  <div class="panel">
+    <h1>GAME OVER</h1>
+    <div class="big-score" id="final-score">0</div>
+    <div class="stat-row"><span>擊殺數</span><span id="final-kills">0</span></div>
+    <div class="stat-row"><span>最高 Combo</span><span id="final-max-combo">0</span></div>
+    <div class="stat-row"><span>波數</span><span id="final-wave">1</span></div>
+    <br>
+    <div id="nameInputBox">
+      <input type="text" id="playerNameInput" placeholder="輸入名字上榜" maxlength="12">
+      <button id="submitScoreBtn">上傳</button>
+    </div>
+    <div id="scoreSubmitMsg" style="font-size:12px;color:#4fc3f7;margin-bottom:8px;min-height:16px"></div>
+    <button class="btn btn-green" id="restartBtn">🔄 再玩一次</button>
+    <button class="btn btn-gray"  id="menuBtn">🏠 主選單</button>
+  </div>
+</div>
+
+<script>
+// =====================================================
+// CONSTANTS & PERFORMANCE CACHE (解決卡頓)
+// =====================================================
+const W = 420, H = 800;
+const SOLDIER_MAX  = 120;
+const BULLET_MAX   = 250; // 調降渲染上限，增加單發質量
+const ENEMY_MAX    = 60;
+const PARTICLE_MAX = 200; // 限制爆炸粒子數量防卡頓
+const FEVER_THRESHOLD = 20;
+
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+function loadImg(src) { const i = new Image(); i.src = src; return i; }
+const IMG = { player: loadImg('cat.png'), enemy: loadImg('dog.png'), boss: loadImg('dogboss.png') };
+
+// 離線畫布渲染 Emoji，效能提升 10 倍以上
+const emojiCache = {};
+function createEmojiSprite(emoji, size) {
+  const c = document.createElement('canvas');
+  c.width = size + 10; c.height = size + 10;
+  const cx = c.getContext('2d');
+  cx.font = `${size}px Arial`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText(emoji, c.width/2, c.height/2 + 2);
+  return c;
+}
+emojiCache['normal'] = createEmojiSprite('🍌', 18);
+emojiCache['fever'] = createEmojiSprite('🍌', 26);
+
+// =====================================================
+// AUDIO SYSTEM (音量分離與 BGM 佔位)
+// =====================================================
+let audioCtx = null;
+let sfxVolume = 0.5; // 獨立音效音量
+let bgmVolume = 0.3; // 獨立 BGM 音量
+
+// 【BGM 設定】在這裡放入你的音樂檔名
+const bgmSrc = 'bgm.mp3'; 
+let bgmAudio = null;
+
+function initBGM() {
+  if (!bgmSrc) return;
+  if (!bgmAudio) {
+    bgmAudio = new Audio(bgmSrc);
+    bgmAudio.loop = true;
+    bgmAudio.volume = bgmVolume;
+  }
+}
+function playBGM() {
+  if (!bgmAudio) initBGM();
+  if (bgmAudio && bgmVolume > 0) bgmAudio.play().catch(()=>{});
+}
+function pauseBGM() { if (bgmAudio) bgmAudio.pause(); }
+function stopBGM() { if (bgmAudio) { bgmAudio.pause(); bgmAudio.currentTime = 0; } }
+
+// 綁定所有 SFX 拉桿 (主選單 + 暫停選單)
+document.querySelectorAll('.sfx-slider').forEach(el => {
+  el.addEventListener('input', e => {
+    sfxVolume = e.target.value / 100;
+    document.querySelectorAll('.sfx-slider').forEach(s => s.value = e.target.value); // 同步數值
+  });
+});
+
+// 綁定所有 BGM 拉桿
+document.querySelectorAll('.bgm-slider').forEach(el => {
+  el.addEventListener('input', e => {
+    bgmVolume = e.target.value / 100;
+    if (bgmAudio) bgmAudio.volume = bgmVolume;
+    document.querySelectorAll('.bgm-slider').forEach(s => s.value = e.target.value); // 同步數值
+  });
+});
+
+function getAudioCtx() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; }
+function playTone(freq, type, dur, vol = 0.15) {
+  if (sfxVolume <= 0) return; // 套用正確的 SFX 音量
+  try {
+    const ac = getAudioCtx(); const osc = ac.createOscillator(); const gain = ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination); osc.type = type; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol * sfxVolume, ac.currentTime); gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur);
+    osc.start(); osc.stop(ac.currentTime + dur);
+  } catch(e) {}
+}
+const SFX = {
+  shoot:      () => playTone(880, 'square', 0.05, 0.06),
+  hit:        () => playTone(220, 'sawtooth', 0.10, 0.10),
+  gateAdd:    () => { [523, 659, 784].forEach((f,i) => setTimeout(() => playTone(f, 'sine', 0.12, 0.2), i * 50)); },
+  gateMinus:  () => { [300, 220, 160].forEach((f,i) => setTimeout(() => playTone(f, 'sawtooth', 0.12, 0.15), i * 60)); },
+  bossHit:    () => playTone(160, 'square', 0.07, 0.12),
+  die:        () => { [440,330,220,110].forEach((f,i) => setTimeout(() => playTone(f,'sawtooth',0.2,0.2), i*80)); },
+  coin:       () => playTone(1047, 'sine', 0.12, 0.18),
+  feverStart: () => { [440, 554, 659, 880].forEach((f,i) => setTimeout(() => playTone(f,'sine',0.4,0.3), i*80)); },
+  comboBreak: () => playTone(150, 'sawtooth', 0.3, 0.2),
+};
+
+// =====================================================
+// LEADERBOARD
+// =====================================================
+const LB_KEY = 'banana_cat_lb_v5';
+function loadLeaderboard() { try { return JSON.parse(localStorage.getItem(LB_KEY)) || []; } catch { return []; } }
+function saveToLeaderboard(name, score, wave, kills) {
+  const lb = loadLeaderboard();
+  lb.push({ name: name.trim() || '無名貓', score, wave, kills, date: Date.now() });
+  lb.sort((a,b) => b.score - a.score); lb.splice(15); // 增加上榜人數
+  localStorage.setItem(LB_KEY, JSON.stringify(lb)); renderLeaderboard();
+  return lb.findIndex(e => e.date === lb.find(x => x.score === score && x.name === name.trim())?.date) + 1;
+}
+function renderLeaderboard() {
+  const lb = loadLeaderboard(); const list = document.getElementById('lb-list');
+  if (!lb.length) { list.innerHTML = '<div id="lb-empty">尚無紀錄<br>快來創造第一個！</div>'; return; }
+  const medals = ['🥇','🥈','🥉'];
+  list.innerHTML = lb.map((e,i) => `<div class="lb-entry"><span class="lb-rank ${i<3?'r'+(i+1):''}">${medals[i]||(i+1)}</span><span class="lb-name">${e.name}</span><span class="lb-score">${e.score}</span><span class="lb-wave">W${e.wave}</span></div>`).join('');
+}
+renderLeaderboard();
+
+// =====================================================
+// STATE & INIT
+// =====================================================
+const State = { MENU:'MENU', PLAYING:'PLAYING', PAUSED:'PAUSED', GAMEOVER:'GAMEOVER' };
+let state = State.MENU;
+let G = {};
+
+function newGameState() {
+  return {
+    tick: 0, score: 0, wave: 1, kills: 0, maxSoldiers: 0,
+    combo: 0, maxCombo: 0, fever: 0, feverCooldown: 0,
+    shake: 0, bgHue: 230, targetBgHue: 230,
+    player: { x: W/2, targetX: W/2, y: 650, w: 120, h: 150, hp: 100, maxHp: 100, flip: false, walkAnim: 0 },
+    soldiers: [], bullets: [], enemies: [], particles: [], gates: [], bossBullets: [], coins: [], gatePopups: [], floatingTexts: [],
+    boss: null, nextBossTick: 1800, spawnInterval: 140, baseEnemySpeed: 0.8,
+    stars: Array.from({length: 70}, () => ({ x: rand(0, W), y: rand(0, H), size: rand(1, 3), speed: rand(0.5, 3) })),
+  };
+}
+
+const UI = {
+  soldiers: document.getElementById('ui-soldiers'), hp: document.getElementById('ui-hp'),
+  score: document.getElementById('ui-score'), wave: document.getElementById('ui-wave'),
+  comboCard: document.getElementById('ui-combo-card'), combo: document.getElementById('ui-combo'),
+  scoreCard: document.getElementById('ui-score-card'),
+  pauseBtn: document.getElementById('pauseBtn'), waveBanner: document.getElementById('waveBanner'),
+};
+
+function showOverlay(id) { document.querySelectorAll('.overlay').forEach(o => o.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+function hideAllOverlays() { document.querySelectorAll('.overlay').forEach(o => o.classList.remove('active')); }
+
+function updateHUD() {
+  UI.soldiers.textContent = G.soldiers.length; UI.hp.textContent = Math.max(0, Math.floor(G.player.hp));
+  UI.score.textContent = Math.floor(G.score); UI.wave.textContent = G.wave;
+  
+  if (G.combo > 1 || G.fever > 0 || G.feverCooldown > 0) { UI.comboCard.style.display = ''; } else { UI.comboCard.style.display = 'none'; }
+  
+  if (G.fever > 0) {
+    UI.comboCard.classList.add('fever-glow'); UI.comboCard.classList.remove('cooldown-state');
+    UI.scoreCard.classList.add('fever-glow');
+    UI.comboCard.innerHTML = `🔥 FEVER: ${Math.ceil(G.fever/60)}s`;
+  } else if (G.feverCooldown > 0) {
+    UI.comboCard.classList.remove('fever-glow'); UI.scoreCard.classList.remove('fever-glow');
+    UI.comboCard.classList.add('cooldown-state');
+    UI.comboCard.innerHTML = `❄️ 冷卻: ${Math.ceil(G.feverCooldown/60)}s`;
+  } else {
+    UI.comboCard.classList.remove('fever-glow'); UI.scoreCard.classList.remove('fever-glow');
+    UI.comboCard.classList.remove('cooldown-state');
+    if (G.combo > 1) UI.comboCard.innerHTML = `🔥 Combo <span id="ui-combo">${G.combo}</span>`;
+  }
+}
+
+// Button Events
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', togglePause);
+document.getElementById('pauseBtn').addEventListener('click', togglePause);
+document.getElementById('quitBtn').addEventListener('click', () => { state = State.MENU; stopBGM(); showOverlay('menuOverlay'); });
+document.getElementById('menuBtn').addEventListener('click', () => { state = State.MENU; stopBGM(); showOverlay('menuOverlay'); });
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+document.getElementById('submitScoreBtn').addEventListener('click', () => {
+  const name = document.getElementById('playerNameInput').value;
+  const rank = saveToLeaderboard(name, Math.floor(G.score), G.wave, G.kills);
+  document.getElementById('scoreSubmitMsg').textContent = `✅ 已上傳！排名第 ${rank} 名`;
+  document.getElementById('submitScoreBtn').disabled = true;
+});
+
+function startGame() {
+  G = newGameState(); for (let i = 0; i < 5; i++) spawnSoldier();
+  state = State.PLAYING; hideAllOverlays(); UI.pauseBtn.style.display = ''; spawnGatePair(); playBGM();
+}
+function togglePause() {
+  if (state === State.PLAYING) { state = State.PAUSED; pauseBGM(); showOverlay('pauseOverlay'); } 
+  else if (state === State.PAUSED) { state = State.PLAYING; playBGM(); hideAllOverlays(); }
+}
+function triggerGameOver() {
+  state = State.GAMEOVER; SFX.die(); stopBGM(); UI.pauseBtn.style.display = 'none';
+  document.getElementById('final-score').textContent = Math.floor(G.score);
+  document.getElementById('final-kills').textContent = G.kills;
+  document.getElementById('final-wave').textContent = G.wave;
+  document.getElementById('final-max-combo').textContent = G.maxCombo;
+  document.getElementById('scoreSubmitMsg').textContent = '';
+  document.getElementById('submitScoreBtn').disabled = false;
+  document.getElementById('playerNameInput').value = '';
+  showOverlay('gameOverOverlay');
+}
+
+// =====================================================
+// INPUT & LOGIC
+// =====================================================
+canvas.addEventListener('mousemove', e => handlePointer(e.clientX));
+canvas.addEventListener('touchmove', e => { handlePointer(e.touches[0].clientX); e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchstart', e => { handlePointer(e.touches[0].clientX); e.preventDefault(); }, { passive: false });
+
+function handlePointer(clientX) {
+  if (state !== State.PLAYING) return;
+  const rect = canvas.getBoundingClientRect(); const nx = (clientX - rect.left) * (W / rect.width);
+  G.player.targetX = Math.min(Math.max(nx, 55), W - 55);
+  G.player.flip = G.player.targetX < G.player.x;
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' || e.key === 'p') { if (state === State.PLAYING || state === State.PAUSED) togglePause(); } });
+
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function randInt(min, max) { return Math.floor(rand(min, max + 1)); }
+function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+
+function spawnGatePair() {
+  const wave = G.wave;
+  const pool = [
+    { type:'add', value: randInt(4, 8 + Math.floor(wave)), color:'rgba(20,200,90,.85)' },
+    { type:'add', value: randInt(8, 15 + Math.floor(wave*1.5)), color:'rgba(20,200,90,.85)' },
+    { type:'minus', value: randInt(2, Math.min(6, 2 + Math.floor(wave/3))), color:'rgba(230,50,50,.85)' },
+    ...(G.soldiers.length >= 3 ? [{ type:'multiply', value: 2, color:'rgba(30,100,255,.85)' }] : []),
+    ...(G.soldiers.length >= 10 ? [{ type:'divide', value: 2, color:'rgba(255,140,0,.85)' }] : [])
+  ];
+  pool.sort(() => 0.5 - Math.random());
+  let left = pool[0], right = pool[1];
+  for (let i = 1; i < pool.length; i++) { if (pool[i].type !== left.type) { right = pool[i]; break; } }
+  
+  if (G.soldiers.length <= 6) {
+    if (left.type === 'minus' || left.type === 'divide') left = pool.find(o => o.type === 'add' || o.type === 'multiply') || left;
+    if (right.type === 'minus' || right.type === 'divide') right = pool.find(o => (o.type === 'add' || o.type === 'multiply') && o !== left) || right;
+  }
+  const mkLabel = op => (op.type === 'add' ? '+' : op.type === 'minus' ? '-' : op.type === 'multiply' ? '×' : '÷') + op.value;
+  const rowId = Date.now();
+  G.gates.push({ x: 0, y: -80, w: W/2, h: 72, rowId, state:'normal', timer:0, ...left, label: mkLabel(left) });
+  G.gates.push({ x: W/2, y: -80, w: W/2, h: 72, rowId, state:'normal', timer:0, ...right, label: mkLabel(right) });
+}
+
+function spawnSoldier() { if (G.soldiers.length < SOLDIER_MAX) G.soldiers.push(1); }
+function spawnEnemy() {
+  for (let i = 0; i < randInt(1, 1 + Math.floor(G.wave / 3)); i++) {
+    if (G.enemies.length >= ENEMY_MAX) break;
+    G.enemies.push({ x: rand(10, W - 110), y: -64, w: 100, h: 60, maxHp: 2 + G.wave * 1.5 + randInt(0, 3), hp: 2 + G.wave * 1.5 + randInt(0, 3), speed: G.baseEnemySpeed + rand(0, 0.4), flash: 0, level: G.wave });
+  }
+}
+function spawnBoss() {
+  G.boss = { x: W/2 - 110, y: 110, w: 220, h: 260, hp: 400 + G.wave * 100, maxHp: 400 + G.wave * 100, dir: 1, speed: 1.2 + G.wave * 0.15, phase: 1, shootTimer: 0, bounce: 0, level: G.wave };
+  showWaveBanner(`👑 Boss Lv.${G.wave} 來襲！`); G.shake = 15;
+}
+function spawnExplosion(x, y, color = '#ffcc00', count = 10) {
+  if (G.particles.length > PARTICLE_MAX) return; // 限制爆炸防卡頓
+  for (let i = 0; i < count; i++) G.particles.push({ x, y, vx: rand(-5, 5), vy: rand(-5, 5), size: rand(2, 6), color, life: 25, maxLife: 25 });
+}
+function spawnCoin(x, y, value = 5) { G.coins.push({ x, y, vy: -4, life: 60, value }); }
+function spawnFloatText(x, y, text, color, scale = 1, isBold = false) { G.floatingTexts.push({ x, y, text, color, scale, isBold, life: 1.0, vy: -1.5 }); }
+function showWaveBanner(text) { UI.waveBanner.textContent = text; UI.waveBanner.style.opacity = '1'; clearTimeout(UI.waveBanner._timeout); UI.waveBanner._timeout = setTimeout(() => { UI.waveBanner.style.opacity = '0'; }, 2000); }
+
+function update() {
+  const p = G.player; G.tick++; const t = G.tick;
+  p.walkAnim += 0.1; p.x += (p.targetX - p.x) * 0.25;
+
+  if (G.shake > 0) { G.shake *= 0.85; if (G.shake < 0.5) G.shake = 0; }
+  
+  // 狂熱與冷卻機制
+  if (G.feverCooldown > 0) G.feverCooldown--;
+  if (G.fever > 0) {
+    G.fever--;
+    if (G.fever === 0) G.feverCooldown = 600; // 10秒冷卻
+  } else if (G.combo >= FEVER_THRESHOLD && G.feverCooldown <= 0) {
+    G.fever = 600; SFX.feverStart(); showWaveBanner('🔥🔥 FEVER TIME !! 🔥🔥'); G.shake = 10;
+  }
+  
+  G.targetBgHue = G.fever > 0 ? 45 : (G.boss ? 350 : 230);
+  G.bgHue += (G.targetBgHue - G.bgHue) * 0.02;
+
+  if (t % 1500 === 0) { G.wave++; showWaveBanner(`🌊 Wave ${G.wave}`); G.spawnInterval = Math.max(40, G.spawnInterval - 12); G.baseEnemySpeed = Math.min(4.0, G.baseEnemySpeed + 0.20); }
+  if (t === 60 || t % 150 === 0) spawnGatePair();
+  if (t % G.spawnInterval === 0) spawnEnemy();
+  if (t >= G.nextBossTick && !G.boss) { spawnBoss(); G.nextBossTick = t + 2500 + G.wave * 120; }
+
+  // 效能優化版的發射機制 (減少子彈數量，增加傷害)
+  const shootFreq = G.fever > 0 ? 5 : 7;
+  if (t % shootFreq === 0 && G.bullets.length < BULLET_MAX) {
+    let shots = clamp(1 + Math.floor(G.soldiers.length / 12), 1, 10);
+    // 狂熱時限制基礎數量，改用散彈擴散，避免畫面卡死
+    if (G.fever > 0) shots = clamp(Math.floor(shots / 1.5), 1, 6); 
+    
+    for (let i = 0; i < shots; i++) {
+      let bx = p.x + (i - (shots-1)/2) * 12;
+      if (G.fever > 0) {
+        G.bullets.push({ x: bx, y: p.y - 70, vx: 0, vy: -16 }, { x: bx, y: p.y - 70, vx: -2.5, vy: -15 }, { x: bx, y: p.y - 70, vx: 2.5, vy: -15 });
+      } else {
+        G.bullets.push({ x: bx, y: p.y - 70, vx: rand(-0.2, 0.2), vy: -14 });
+      }
+    }
+    if (t % 18 === 0) SFX.shoot();
+  }
+
+  for (let i = G.bullets.length - 1; i >= 0; i--) {
+    const b = G.bullets[i]; b.x += b.vx; b.y += b.vy;
+    if (b.y < -20 || b.x < 0 || b.x > W) G.bullets.splice(i, 1);
+  }
+
+  const triggeredRows = new Set();
+  for (let i = G.gates.length - 1; i >= 0; i--) {
+    const g = G.gates[i]; g.y += 3.5;
+    if (g.state === 'triggered' || g.state === 'shatter') {
+      g.timer--; 
+      if(g.state==='shatter') spawnExplosion(g.x+g.w/2+rand(-30,30), g.y+g.h/2+rand(-20,20), '#445', 1);
+      if (g.timer <= 0) G.gates.splice(i, 1);
+      continue;
+    }
+    if (!triggeredRows.has(g.rowId) && p.x > g.x && p.x < g.x+g.w && p.y > g.y && p.y < g.y+g.h) {
+      triggeredRows.add(g.rowId); const popupInfo = applyGate(g);
+      spawnFloatText(g.x + g.w/2, g.y + g.h/2, popupInfo.text, popupInfo.color, 1.5, true);
+      g.state = 'triggered'; g.timer = 15;
+      const pairIdx = G.gates.findIndex(x => x.rowId === g.rowId && x !== g);
+      if (pairIdx !== -1) { G.gates[pairIdx].state = 'shatter'; G.gates[pairIdx].timer = 15; }
+    }
+    if (g.y > H + 80) G.gates.splice(i, 1);
+  }
+
+  for (let i = G.enemies.length - 1; i >= 0; i--) {
+    const e = G.enemies[i]; e.y += e.speed; if (e.flash > 0) e.flash--;
+    if (e.y + e.h >= p.y) { takeDamage(Math.max(1, Math.floor(e.maxHp / 3))); spawnExplosion(e.x + e.w/2, e.y, '#ff3333'); G.enemies.splice(i, 1); } 
+    else if (e.y > H + 60) { G.enemies.splice(i, 1); }
+  }
+
+  if (G.boss) {
+    const b = G.boss; b.x += b.dir * b.speed; b.bounce += 0.08;
+    if (b.x < 0 || b.x + b.w > W) b.dir *= -1;
+    if (b.hp < b.maxHp * 0.5 && b.phase === 1) { b.phase = 2; spawnFloatText(b.x+b.w/2, b.y, "狂暴化！", "#f00", 1.8, true); G.shake = 10; }
+
+    b.shootTimer++; const shootRate = Math.max(20, 50 - G.wave * 2);
+    if (b.shootTimer % shootRate === 0) {
+      const dx = p.x - (b.x + b.w/2), dy = p.y - (b.y + b.h), len = Math.sqrt(dx*dx + dy*dy);
+      G.bossBullets.push({ x: b.x + b.w/2, y: b.y + b.h, vx: (dx/len)*6, vy: (dy/len)*6 });
+      if (b.phase === 2 && b.shootTimer % (shootRate*2) === 0) {
+        G.shake = 5;
+        for(let i=0; i<8; i++) { const angle = (Math.PI*2/8) * i; G.bossBullets.push({ x: b.x+b.w/2, y: b.y+b.h, vx: Math.cos(angle)*4, vy: Math.sin(angle)*4 }); }
+      }
+    }
+  }
+
+  for (let i = G.bossBullets.length - 1; i >= 0; i--) {
+    const b = G.bossBullets[i]; b.x += b.vx; b.y += b.vy;
+    if (Math.abs(b.x - p.x) < 45 && b.y > p.y - 30 && b.y < p.y + 40) { takeDamage(12); spawnExplosion(b.x, b.y, '#ff3333'); G.bossBullets.splice(i, 1); } 
+    else if (b.y > H + 20 || b.x < -20 || b.x > W + 20 || b.y < -20) { G.bossBullets.splice(i, 1); }
+  }
+
+  for (let bi = G.bullets.length - 1; bi >= 0; bi--) {
+    const b = G.bullets[bi]; let hit = false;
+    for (let ei = G.enemies.length - 1; ei >= 0; ei--) {
+      const e = G.enemies[ei];
+      if (b.x > e.x && b.x < e.x + e.w && b.y > e.y && b.y < e.y + e.h) {
+        e.hp -= (G.fever > 0 ? 2.5 : 1); e.flash = 6; spawnExplosion(b.x, b.y, '#ffcc00', 3); hit = true;
+        if (e.hp <= 0) { handleKill(e); G.enemies.splice(ei, 1); }
+        break;
+      }
+    }
+    if (!hit && G.boss) {
+      const bss = G.boss;
+      if (b.x > bss.x && b.x < bss.x + bss.w && b.y > bss.y && b.y < bss.y + bss.h) {
+        bss.hp -= (G.fever > 0 ? 2.5 : 1); SFX.bossHit(); spawnExplosion(b.x, b.y, '#ff4444', 3); hit = true;
+        if (bss.hp <= 0) { handleKill(bss, true); G.boss = null; }
+      }
+    }
+    if (hit) G.bullets.splice(bi, 1);
+  }
+
+  for (let i = G.coins.length - 1; i >= 0; i--) {
+    const c = G.coins[i]; c.y += c.vy; c.vy += 0.35; c.life--;
+    if (Math.abs(c.x - p.x) < 65 && Math.abs(c.y - p.y) < 75) { G.score += c.value * (G.fever > 0 ? 2 : 1); SFX.coin(); G.coins.splice(i, 1); } 
+    else if (c.life <= 0 || c.y > H + 20) { G.coins.splice(i, 1); }
+  }
+
+  G.stars.forEach(s => { s.y += s.speed * (G.fever > 0 ? 2.5 : 1); if(s.y > H) s.y = 0; });
+  for (let i = G.floatingTexts.length - 1; i >= 0; i--) { const ft = G.floatingTexts[i]; ft.life -= 0.025; ft.y += ft.vy; if (ft.life <= 0) G.floatingTexts.splice(i, 1); }
+  for (let i = G.particles.length - 1; i >= 0; i--) { const p_ = G.particles[i]; p_.x += p_.vx; p_.y += p_.vy; p_.vy += 0.15; p_.life--; if (p_.life <= 0) G.particles.splice(i, 1); }
+
+  if (p.hp <= 0) triggerGameOver();
+}
+
+function handleKill(enemy, isBoss = false) {
+  G.combo++; if (G.combo > G.maxCombo) G.maxCombo = G.combo;
+  const multi = 1 + (G.combo * 0.1);
+  const baseScore = isBoss ? (1200 + G.wave*60) : (15 + G.wave*2);
+  G.score += baseScore * multi * (G.fever > 0 ? 2 : 1); G.kills++;
+  spawnFloatText(enemy.x + enemy.w/2, enemy.y, `${G.combo} Combo!`, '#FFD700', 1.2, true);
+  if (isBoss) { SFX.die(); G.shake = 30; spawnExplosion(enemy.x+enemy.w/2, enemy.y+enemy.h/2, '#ff0000', 40); showWaveBanner('🎉 Boss 擊退！'); } 
+  else { SFX.hit(); spawnExplosion(enemy.x+enemy.w/2, enemy.y+enemy.h/2, '#ffaa00', 12); if (Math.random() < 0.4) spawnCoin(enemy.x+enemy.w/2, enemy.y, randInt(3, 8)); }
+}
+
+function takeDamage(dmg) {
+  if (G.combo > 0) { G.combo = 0; SFX.comboBreak(); spawnFloatText(G.player.x, G.player.y-100, "Combo Break!", "#aaa", 1.2, true); }
+  G.fever = 0; G.shake = 15;
+  if (G.soldiers.length > 0) { const lost = Math.min(G.soldiers.length, Math.ceil(dmg / 3)); G.soldiers.splice(G.soldiers.length - lost, lost); } 
+  else { G.player.hp -= dmg; }
+}
+
+function applyGate(g) {
+  const prev = G.soldiers.length; let n = prev;
+  switch (g.type) { case 'add': n+=g.value; break; case 'minus': n-=g.value; break; case 'multiply': n*=g.value; break; case 'divide': n=Math.floor(n/g.value); break; }
+  n = clamp(n, 1, SOLDIER_MAX); const diff = n - prev;
+  let popupText, popupColor;
+
+  if (diff > 0) {
+    if (prev >= SOLDIER_MAX) { SFX.gateAdd(); popupText = '+0 (MAX)'; popupColor = '#aaa'; } 
+    else { for(let i=0;i<diff;i++) spawnSoldier(); SFX.gateAdd(); popupText = g.type==='multiply'?`×${g.value}`:`+${diff}`; popupColor = '#39ff14'; G.combo++; }
+  } else if (diff < 0) {
+    G.soldiers.splice(G.soldiers.length + diff); SFX.gateMinus(); popupText = `${diff}`; popupColor = '#ff4444'; G.shake=8;
+    if (G.combo > 0) { G.combo = 0; SFX.comboBreak(); spawnFloatText(G.player.x, G.player.y-80, "Combo Break!", "#aaa", 1.2, true); G.fever = 0; }
+  } else { popupText = '+0'; popupColor = '#888'; }
+  return { text: popupText, color: popupColor };
+}
+
+// =====================================================
+// DRAWING
+// =====================================================
+function drawImageFallback(img, fallbackFn, x, y, w, h) { if (img.complete && img.naturalWidth > 0) { ctx.drawImage(img, x, y, w, h); } else { fallbackFn(x, y, w, h); } }
+function drawHealthBar(x, y, w, ratio, colorFill = '#00ff66', colorBg = '#111') {
+  ctx.fillStyle = colorBg; ctx.fillRect(x, y, w, 8);
+  ctx.fillStyle = colorFill; ctx.fillRect(x, y, w * clamp(ratio, 0, 1), 8);
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.strokeRect(x, y, w, 8);
+}
+
+function draw() {
+  ctx.save();
+  if (G.shake > 0) ctx.translate(rand(-G.shake, G.shake), rand(-G.shake, G.shake));
+
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, `hsl(${G.bgHue}, 60%, 15%)`); bg.addColorStop(1, `hsl(${G.bgHue}, 60%, 5%)`);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#fff';
+  G.stars.forEach(s => { ctx.globalAlpha = s.size/3; ctx.fillRect(s.x, s.y, s.size, s.size); }); ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1;
+  for (let i = 0; i < H; i += 50) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke(); }
+  for (let i = 0; i < W; i += 50) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke(); }
+
+  G.gates.forEach(g => {
+    if (g.state === 'triggered') { ctx.globalAlpha = g.timer/15; ctx.fillStyle = '#fff'; ctx.fillRect(g.x-10, g.y-10, g.w+20, g.h+20); ctx.globalAlpha = 1; return; }
+    if (g.state === 'shatter') { ctx.globalAlpha = g.timer/15; ctx.fillStyle = '#334'; const s = 15-g.timer; ctx.fillRect(g.x+s, g.y+s, g.w-s*2, g.h-s*2); ctx.globalAlpha = 1; return; }
+
+    ctx.fillStyle = g.color; ctx.fillRect(g.x, g.y, g.w, g.h);
+    ctx.shadowColor = g.color; ctx.shadowBlur = 14; ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3;
+    ctx.strokeRect(g.x+1, g.y+1, g.w-2, g.h-2); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 30px ' + getComputedStyle(document.body).fontFamily; ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 8; ctx.fillText(g.label, g.x+g.w/2, g.y+44); ctx.shadowBlur = 0;
+  });
+
+  G.coins.forEach(c => { ctx.globalAlpha = Math.min(1, c.life/20); ctx.font = '20px Arial'; ctx.fillText('💰', c.x, c.y); ctx.globalAlpha=1; });
+
+  // Boss Drawing & Enhanced HP Bar
+  if (G.boss) {
+    const b = G.boss; const move = Math.sin(b.bounce) * 6;
+    
+    // 移除耗能的 css filter，改用 shadow 繪製狂暴光暈
+    if (b.phase === 2) { ctx.shadowColor = '#f00'; ctx.shadowBlur = 20; }
+    drawImageFallback(IMG.boss, (x, y, w, h) => { ctx.fillStyle = '#cc2200'; ctx.beginPath(); ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2); ctx.fill(); }, b.x, b.y + move, b.w, b.h);
+    ctx.shadowBlur = 0;
+    
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px Arial'; ctx.fillText(`Lv.${b.level}`, b.x+b.w/2, b.y+move-8);
+    
+    // Boss 強化版血量條
+    const barY = 70; const barH = 22; const ratio = b.hp / b.maxHp; 
+    const barColor = ratio > 0.5 ? '#ee2222' : ratio > 0.25 ? '#ff7700' : '#ff0033';
+    
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 6;
+    ctx.fillStyle = '#222'; ctx.fillRect(30, barY, W-60, barH);
+    ctx.fillStyle = barColor; ctx.fillRect(30, barY, (W-60) * clamp(ratio, 0, 1), barH);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.strokeRect(30, barY, W-60, barH);
+    
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px Arial'; 
+    ctx.fillText(`👑 Boss Lv.${b.level}  ${Math.ceil(b.hp)} / ${b.maxHp}`, W/2, barY + 16);
+  }
+
+  G.enemies.forEach(e => {
+    if (e.flash > 0) { ctx.globalAlpha = 0.55; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(e.x+e.w/2, e.y+e.h/2, e.w/2, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; } 
+    else { drawImageFallback(IMG.enemy, (x,y,w,h) => { ctx.fillStyle='#f44'; ctx.beginPath(); ctx.arc(x+w/2,y+h/2,w/2,0,Math.PI*2); ctx.fill(); }, e.x, e.y, e.w, e.h); }
+    drawHealthBar(e.x, e.y - 12, e.w, e.hp/e.maxHp, e.hp/e.maxHp > 0.5 ? '#4f8' : '#f33');
+    ctx.fillStyle = '#fff'; ctx.font = `bold 11px Arial`; ctx.fillText(`Lv.${e.level}`, e.x+e.w/2, e.y-14);
+  });
+
+  G.bossBullets.forEach(b => {
+    ctx.beginPath(); ctx.arc(b.x, b.y, 8, 0, Math.PI*2); ctx.fillStyle = '#000'; ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, Math.PI*2); ctx.fillStyle = G.boss?.phase === 2 ? '#f0f' : '#f22';
+    ctx.shadowColor = G.boss?.phase === 2 ? '#f0f' : '#f00'; ctx.shadowBlur = 12; ctx.fill(); ctx.shadowBlur = 0;
+  });
+
+  // 使用離線畫布快取繪製子彈 (效能大幅提升)
+  const bulletImg = G.fever > 0 ? emojiCache['fever'] : emojiCache['normal'];
+  const offset = G.fever > 0 ? 18 : 14;
+  G.bullets.forEach(b => { ctx.drawImage(bulletImg, b.x - offset, b.y - offset); });
+
+  const p = G.player; const bounce = Math.sin(p.walkAnim) * 4;
+  if (p.flip) { ctx.save(); ctx.translate(p.x, 0); ctx.scale(-1, 1); drawImageFallback(IMG.player, (x,y,w,h)=>{}, -p.w/2, p.y-p.h/2+bounce, p.w, p.h); ctx.restore(); } 
+  else { drawImageFallback(IMG.player, (x,y,w,h)=>{}, p.x-p.w/2, p.y-p.h/2+bounce, p.w, p.h); }
+  drawHealthBar(p.x - 44, p.y - 100, 88, p.hp/p.maxHp, p.hp/p.maxHp > 0.5 ? '#0f8' : '#f33');
+
+  G.floatingTexts.forEach(ft => {
+    ctx.globalAlpha = Math.max(0, ft.life);
+    const fontSize = Math.round(20 * ft.scale * (1 + (1-ft.life)*0.2));
+    ctx.font = `${ft.isBold?'bold ':''}${fontSize}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.fillStyle = ft.color; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 4;
+    ctx.strokeText(ft.text, ft.x, ft.y); ctx.fillText(ft.text, ft.x, ft.y);
+  });
+  ctx.globalAlpha = 1;
+
+  G.particles.forEach(p_ => { ctx.globalAlpha = Math.max(0, p_.life/p_.maxLife); ctx.fillStyle = p_.color; ctx.beginPath(); ctx.arc(p_.x, p_.y, p_.size, 0, Math.PI*2); ctx.fill(); });
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+let lastTime = 0;
+function loop(timestamp) {
+  requestAnimationFrame(loop);
+  const delta = Math.min(timestamp - lastTime, 50); lastTime = timestamp;
+  if (state === State.PLAYING) { update(); draw(); updateHUD(); } else if (G.player) { draw(); }
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
